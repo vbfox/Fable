@@ -157,6 +157,20 @@ let forgeGetProjectOptions projFile =
 #endif
 
 let getProjectOpts (checker: FSharpChecker) (opts: CompilerOptions) =
+    // As GetProjectOptionsFromScript adds many dll references, we must remove
+    // the defaults if they've been referenced explictitly in the fsx
+    let removeDuplicatedDlls (otherOpts: string[]) =
+        (otherOpts, (Set.empty<string>, []))
+        ||> Array.foldBack(fun s (dlls, acc) ->
+            if s.StartsWith "-r:"
+            then
+                let dllName = s.Substring 3 |> Path.GetFileName
+                if dlls.Contains dllName
+                then (dlls, acc) // Ignore the reference
+                else (Set.add dllName dlls, s::acc)
+            else (dlls, s::acc)
+        )
+        |> snd |> List.toArray
     let rec addSymbols (symbols: string list) (opts: FSharpProjectOptions) =
         let addSymbols' (otherOpts: string[]) =
             otherOpts
@@ -172,6 +186,7 @@ let getProjectOpts (checker: FSharpChecker) (opts: CompilerOptions) =
       let defines = [|for symbol in opts.symbols do yield "--define:" + symbol|]
       checker.GetProjectOptionsFromScript(projFile, File.ReadAllText projFile, otherFlags = defines)
       |> Async.RunSynchronously
+      |> fun opts -> { opts with OtherOptions = removeDuplicatedDlls opts.OtherOptions }
     #if DOTNETCORE
     | ".fsproj" -> forgeGetProjectOptions projFile
     | _ as s -> failwith (sprintf "Unsupported project type: %s" s)

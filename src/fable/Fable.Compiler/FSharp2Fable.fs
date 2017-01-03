@@ -333,8 +333,9 @@ and private transformExprWithRole (role: Role) (com: IFableCompiler) ctx fsExpr 
             let ctx = { ctx with scopedInlines = (var, value)::ctx.scopedInlines }
             transformExpr com ctx body
         else
+            // Bind the identifier to the context before compiling the value expression
+            let ctx, ident = bindIdent com ctx (makeType com ctx value.Type) (Some var) var.CompiledName
             let value = transformExpr com ctx value
-            let ctx, ident = bindIdent com ctx value.Type (Some var) var.CompiledName
             let body = transformExpr com ctx body
             let assignment = Fable.VarDeclaration (ident, value, var.IsMutable)
             makeSequential (makeRangeFrom fsExpr) [assignment; body]

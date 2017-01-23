@@ -663,7 +663,9 @@ let compile (com: ICompiler) checker (projInfo: FSProjInfo) =
         // Compile project files, print them and get extra info
         // ----------------------------------------------------
         let rewrites =
-            com.Plugins |> Seq.choose (function _, (:? IRewritePlugin as r) -> Some r | _ -> None)
+            com.Plugins
+            |> Seq.choose (function _, (:? IRewritePlugin as r) -> Some r | _ -> None)
+            |> Seq.append [Fable.Tailcalls.TailcallRewrite()]
         let applyRewrites (extra, input) =
             extra, rewrites |> Seq.fold (fun input rewrite -> rewrite.Rewrite input) input
 

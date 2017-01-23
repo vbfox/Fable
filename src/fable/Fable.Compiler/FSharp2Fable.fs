@@ -743,7 +743,7 @@ and private transformExprWithRole (role: Role) (com: IFableCompiler) ctx fsExpr 
                         var::vars, ctx)
                 let lambda =
                     com.Transform targetCtx targetExpr |> makeLambdaExpr targetVars
-                let ctx, ident = bindIdent com ctx lambda.Type None (sprintf "$target%i" k)
+                let ctx, ident = bindIdent com ctx lambda.Type None (sprintf "_target%i" k)
                 ctx, Map.add k (ident, lambda) acc) (ctx, Map.empty<_,_>)
         let decisionTargets =
             targetRefsCount |> Map.map (fun k v ->

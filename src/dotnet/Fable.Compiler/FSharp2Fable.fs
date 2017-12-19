@@ -90,6 +90,13 @@ let dbgShit (x: FSharpMemberOrFunctionOrValue) =
     printfn " - %A " x.FullName
     printfn " - %A " x.LogicalName
 
+let isOperator (m: FSharpMemberOrFunctionOrValue) =
+    match m.EnclosingEntity |> Option.map (fun e -> e.FullName) with
+    | Some "Microsoft.FSharp.Core.Operators"
+    | Some "Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators"
+    | Some "Microsoft.FSharp.Core.ExtraTopLevelOperators" -> true
+    | _ -> false
+
 let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body: FSharpExpr) isDelegate =
     let listAll predicate lst = not (List.exists (predicate >> not) lst)
     match isDelegate, body with
@@ -98,9 +105,11 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
             match a with
             | BasicPatterns.Value a -> a.Equals(p)
             | _ -> false)
-        if sameArgs then
+
+        if sameArgs && (not (isOperator memberOrFunction)) then
             printfn "CALL target=%A" target
             printfn "CALL memberOrFunction=%A" memberOrFunction
+            printfn "CALL memberOrFunction.EnclosingEntity=%A" memberOrFunction.EnclosingEntity.Value.FullName
             printfn "CALL typeArgs=%A" typeArgs
             printfn "CALL methodTypeArgs=%A" methodTypeArgs
             printfn "CALL parameters=%A" parameters
@@ -110,26 +119,25 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
     | _ -> None
 
 let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs (body: FSharpExpr) isDelegate =
-    (*printfn "TRANSFORMING LAMBDA %A" fsExpr
-    printfn " - TYPE %A" fsExpr.Type
-    printfn " - SUB %d" body.ImmediateSubExpressions.Length
-    printfn " - ARGS %A" args
-    printfn " - TUPLE_DESTRUCT %A" tupleDestructs
-    printfn " - BODY %A" body
-    printfn " - ISDELEGATE %A" isDelegate
-    printfn " - CTX %A" ctx*)
-
     match lambdaCanBeRemoved args body isDelegate with
-    | Some x ->
+    | Some x when true ->
         printfn "----------------------------------------------"
         printfn "CAN BE REMOVED"
         printfn "----------------------------------------------"
+        printfn " - TYPE %A" fsExpr.Type
+        printfn " - SUB %d" body.ImmediateSubExpressions.Length
+        printfn " - ARGS %A" args
+        printfn " - TUPLE_DESTRUCT %A" tupleDestructs
+        printfn " - BODY %A" body
+        printfn " - ISDELEGATE %A" isDelegate
+        printfn " - CTX %A" ctx
+
         let r, typ = makeRangeFrom fsExpr, makeType com ctx.typeArgs fsExpr.Type
         printfn "r=%A" r
         printfn "typ=%A" typ
 
         makeValueFrom com ctx r typ true x
-    | None ->
+    | _ ->
         let lambdaType = makeType com ctx.typeArgs fsExpr.Type
         let ctx, args = makeLambdaArgs com ctx args
         let ctx =

@@ -5,4 +5,5 @@
 #if FABLE_COMPILER
 open Fable.Core.JsInterop
 importSideEffects "./ApplicativeTests.fs"
+importSideEffects "./SudokuTest.fs"
 #endif

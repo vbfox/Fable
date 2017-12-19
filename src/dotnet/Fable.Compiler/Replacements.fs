@@ -804,6 +804,8 @@ module AstPass =
                 GlobalCall ("Math", Some methName, false, args)
                 |> makeCall range typ |> Some
         let r, typ, args = info.range, info.returnType, info.args
+        if info.methodName = "identity" then
+            printfn "XXXXXXXXXXXXXXXX %A" info
         match info.methodName with
         | "keyValuePattern" ->
             info.args.Head |> Some
@@ -890,7 +892,7 @@ module AstPass =
             |> sprintf "void($0.contents%s)"
             |> emit info <| args |> Some
         // Conversions
-        | "createSequence" | "identity" | "box" | "unbox" -> wrap typ args.Head |> Some
+        | "createSequence" | "identity" | "box" | "unbox" when args.Length = 1 -> wrap typ args.Head |> Some
         | "toSByte" | "toByte"
         | "toInt8" | "toUInt8"
         | "toInt16" | "toUInt16"

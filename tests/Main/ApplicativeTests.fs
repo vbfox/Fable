@@ -19,13 +19,10 @@ module FullApplication =
         let name = GetName SomeFunction
         equal "SomeFunction" name
 
-    type WithMembers() =
-        member this.SomeMember() = failwith "Never called"
-
     [<Test>]
-    let ``Members passed as parameters don't generate intermediate annonymous functions`` () =
-        let inst = WithMembers()
-        let name = GetName inst.SomeMember
-        equal "SomeFunction" name
-
+    let ``Special functions are ok`` () =
+        ignore (GetName id)
+        ignore (GetName sqrt)
+        ignore (GetName not)
+        ignore (GetName abs)
 #endif

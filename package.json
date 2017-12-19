@@ -3,7 +3,7 @@
   "scripts": {
     "tsc": "tsc",
     "tslint": "tslint",
-    "mocha": "mocha --grep intermediate",
+    "mocha": "mocha",
     "webpack": "webpack"
   },
   "devDependencies": {

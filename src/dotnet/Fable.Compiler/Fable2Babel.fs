@@ -6,7 +6,6 @@ open Fable.AST.Babel
 open Fable.AST.Fable.Util
 open System
 open System.Collections.Generic
-
 type ReturnStrategy =
     | Return
     | Assign of Expression
@@ -389,15 +388,78 @@ module Util =
             :> Expression
         | _ -> e
 
+    /// A removable lambda is a lambda that does nothing but call a single function/method
+    /// passing all it's arguments as-is.
+    let getRemovableLambda (args: Pattern list) (body: U2<BlockStatement, Expression>) =
+        let listAll predicate lst = not (List.exists (predicate >> not) lst)
+        let hasSameArgs (callExpr: CallExpression) =
+            if callExpr.arguments.Length = args.Length then
+                let argNames = args |> List.map (function | :? Identifier as id -> id.name | _ -> "")
+                List.zip argNames callExpr.arguments |> listAll (fun (expectedName, arg) ->
+                    match arg with
+                    | U2.Case1 argExpr when argExpr.``type`` = "Identifier" ->
+                        let argIdentifier = argExpr :?> Identifier
+                        argIdentifier.name = expectedName
+                    | _ -> false
+                )
+            else
+                false
+
+        let getRemovableCall (e: Expression) =
+            match e with
+            | :? CallExpression as callExpr ->
+                if hasSameArgs callExpr then
+                    match callExpr.callee with
+                    | :? Identifier -> Some callExpr.callee
+                    | :? MemberExpression as memberExpr ->
+                        if (not memberExpr.computed) && (memberExpr.``object``.``type`` = "Identifier") then
+                            Some (
+                                CallExpression(
+                                    MemberExpression(
+                                        memberExpr,
+                                        Identifier("bind"),
+                                        ?computed = Some false),
+                                    [ U2.Case1 (memberExpr.``object``) ]) :> Expression)
+                        else
+                            None
+                    | _ -> None
+                else
+                    None
+            | _ ->
+                None
+
+        match body with
+        | U2.Case2 e ->
+            // function(x) { return foo(x); } -> foo
+            // Only valid because the call was generated in F#: Functions are mutable and can have members in
+            // javascript and this transformation change what is returned.
+            getRemovableCall e
+        | U2.Case1 block ->
+            // function(x) { foo(x); } -> foo
+            // Only valid because the call was generated in F#: this transformation changes the return type of the
+            // function.
+            match block.body with
+            | [statement] ->
+                match statement with
+                | :? ExpressionStatement as statement ->
+                    getRemovableCall statement.expression
+                | _ -> None
+            | _ ->
+                None
+        | _ -> None
+
     let transformLambda r (info: Fable.LambdaInfo) args body: Expression =
         if info.CaptureThis
         // Arrow functions capture the enclosing `this` in JS
         then upcast ArrowFunctionExpression (args, body, ?loc=r)
         else
-            match body with
-            | U2.Case1 body -> body
-            | U2.Case2 e -> BlockStatement([ReturnStatement(e, ?loc=e.loc)], ?loc=e.loc)
-            |> fun body -> upcast FunctionExpression (args, body, ?loc=r)
+            match getRemovableLambda args body with
+            | Some e -> e
+            | _ ->
+                match body with
+                | U2.Case1 body -> body
+                | U2.Case2 e -> BlockStatement([ReturnStatement(e, ?loc=e.loc)], ?loc=e.loc)
+                |> fun body -> upcast FunctionExpression (args, body, ?loc=r)
 
     let transformValue (com: IBabelCompiler) (ctx: Context) r = function
         | Fable.ImportRef (memb, path, kind) ->

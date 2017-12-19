@@ -84,6 +84,8 @@ let private compileDerivedConstructor com ctx ent baseFullName (fsExpr: FSharpEx
         Fable.Value Fable.Null
 
 let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs body isDelegate =
+    
+    printfn "TRANSFORMING LAMBDA %A %A %A" fsExpr args body
     let lambdaType = makeType com ctx.typeArgs fsExpr.Type
     let ctx, args = makeLambdaArgs com ctx args
     let ctx =
@@ -539,6 +541,7 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
         |> makeLoop (makeRangeFrom fsExpr)
 
     | ErasableLambda (expr, argExprs) ->
+        printfn "ERASABLE LAMBDA"
         List.map (transformExpr com ctx) argExprs
         |> transformComposableExpr com ctx expr
 
@@ -677,13 +680,17 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
         transformTraitCall com ctx r typ sourceTypes traitName flags argTypes argExprs
 
     | BasicPatterns.Call(callee, meth, typArgs, methTypArgs, args) ->
+        printfn "CALL IN (%A, %A, %A, %A, %A)" callee meth typArgs methTypArgs args
         let callee = Option.map (com.Transform ctx) callee
         let args = List.map (transformExpr com ctx) args
         let r, typ = makeRangeFrom fsExpr, makeType com ctx.typeArgs fsExpr.Type
-        makeCallFrom com ctx r typ meth (typArgs, methTypArgs) callee args
+        let xxx = makeCallFrom com ctx r typ meth (typArgs, methTypArgs) callee args
+        printfn "CALL OUT %A" xxx
+        xxx
 
     // Application of locally inlined lambdas
     | BasicPatterns.Application(BasicPatterns.Value var, typeArgs, args) when isInline var ->
+        printfn "INLINE APPLICATION %A" var
         let range = makeRange fsExpr.Range
         match ctx.scopedInlines |> List.tryFind (fun (v,_) -> obj.Equals(v, var)) with
         | Some (_,fsExpr) ->
@@ -700,20 +707,23 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
             |> addErrorAndReturnNull com ctx.fileName (Some range)
 
     | FlattenedApplication(Transform com ctx callee, _typeArgs, args) ->
+        printfn "FLATTENED APPLICATION %A\n - WITH ARGS %A" callee args
         // TODO: Ask why application without arguments happen. So far I've seen it for
         // accessing None or struct values (like the Result type)
-        if args.Length = 0 then callee else
-        let typ, range = makeType com ctx.typeArgs fsExpr.Type, makeRangeFrom fsExpr
-        let args = List.map (transformExpr com ctx) args
-        match callee.Type with
-        | Fable.DeclaredType(ent,_) when ent.FullName = "Fable.Core.Applicable" ->
-            let args =
-                match args with
-                | [Fable.Value(Fable.TupleConst args)] -> args
-                | args -> args
-            Fable.Apply(callee, args, Fable.ApplyMeth, typ, range)
-        | _ ->
-        makeApply com range typ callee args
+        if args.Length = 0 then
+            callee
+        else
+            let typ, range = makeType com ctx.typeArgs fsExpr.Type, makeRangeFrom fsExpr
+            let args = List.map (transformExpr com ctx) args
+            match callee.Type with
+            | Fable.DeclaredType(ent,_) when ent.FullName = "Fable.Core.Applicable" ->
+                let args =
+                    match args with
+                    | [Fable.Value(Fable.TupleConst args)] -> args
+                    | args -> args
+                Fable.Apply(callee, args, Fable.ApplyMeth, typ, range)
+            | _ ->
+            makeApply com range typ callee args
 
     | BasicPatterns.IfThenElse (Transform com ctx guardExpr, Transform com ctx thenExpr, Transform com ctx elseExpr) ->
         Fable.IfThenElse (guardExpr, thenExpr, elseExpr, makeRangeFrom fsExpr)

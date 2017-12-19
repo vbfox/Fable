@@ -94,11 +94,11 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
     let listAll predicate lst = not (List.exists (predicate >> not) lst)
     match isDelegate, body with
     | false, BasicPatterns.Call (target, memberOrFunction, typeArgs, methodTypeArgs, parameters) when target.IsNone && parameters.Length = args.Length ->
-        printfn "CALL target=%A" target
+        (*printfn "CALL target=%A" target
         printfn "CALL memberOrFunction=%A" memberOrFunction
         printfn "CALL typeArgs=%A" typeArgs
         printfn "CALL methodTypeArgs=%A" methodTypeArgs
-        printfn "CALL parameters=%A" parameters
+        printfn "CALL parameters=%A" parameters*)
 
         let sameArgs = args |> List.zip parameters |> listAll (fun (a, p) ->
             match a with
@@ -111,19 +111,14 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
     | _ -> None
 
 let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs (body: FSharpExpr) isDelegate =
-    printfn "TRANSFORMING LAMBDA %A" fsExpr
+    (*printfn "TRANSFORMING LAMBDA %A" fsExpr
     printfn " - TYPE %A" fsExpr.Type
     printfn " - SUB %d" body.ImmediateSubExpressions.Length
     printfn " - ARGS %A" args
     printfn " - TUPLE_DESTRUCT %A" tupleDestructs
     printfn " - BODY %A" body
     printfn " - ISDELEGATE %A" isDelegate
-    printfn " - CTX %A" ctx
-
-    match fsExpr with
-    | BasicPatterns.Lambda (memberOrFunction, _) ->
-        printfn "LAMBDA memberOrFunction=%A" memberOrFunction
-    | _ -> ()
+    printfn " - CTX %A" ctx*)
 
     match lambdaCanBeRemoved args body isDelegate with
     | Some x ->
@@ -591,7 +586,6 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
         |> makeLoop (makeRangeFrom fsExpr)
 
     | ErasableLambda (expr, argExprs) ->
-        printfn "ERASABLE LAMBDA"
         List.map (transformExpr com ctx) argExprs
         |> transformComposableExpr com ctx expr
 
@@ -730,17 +724,13 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
         transformTraitCall com ctx r typ sourceTypes traitName flags argTypes argExprs
 
     | BasicPatterns.Call(callee, meth, typArgs, methTypArgs, args) ->
-        printfn "CALL IN (%A, %A, %A, %A, %A)" callee meth typArgs methTypArgs args
         let callee = Option.map (com.Transform ctx) callee
         let args = List.map (transformExpr com ctx) args
         let r, typ = makeRangeFrom fsExpr, makeType com ctx.typeArgs fsExpr.Type
-        let xxx = makeCallFrom com ctx r typ meth (typArgs, methTypArgs) callee args
-        printfn "CALL OUT %A" xxx
-        xxx
+        makeCallFrom com ctx r typ meth (typArgs, methTypArgs) callee args
 
     // Application of locally inlined lambdas
     | BasicPatterns.Application(BasicPatterns.Value var, typeArgs, args) when isInline var ->
-        printfn "INLINE APPLICATION %A" var
         let range = makeRange fsExpr.Range
         match ctx.scopedInlines |> List.tryFind (fun (v,_) -> obj.Equals(v, var)) with
         | Some (_,fsExpr) ->
@@ -757,7 +747,6 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
             |> addErrorAndReturnNull com ctx.fileName (Some range)
 
     | FlattenedApplication(Transform com ctx callee, _typeArgs, args) ->
-        printfn "FLATTENED APPLICATION %A\n - WITH ARGS %A" callee args
         // TODO: Ask why application without arguments happen. So far I've seen it for
         // accessing None or struct values (like the Result type)
         if args.Length = 0 then

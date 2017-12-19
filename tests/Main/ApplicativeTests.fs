@@ -9,7 +9,7 @@ open Fable.Tests.Util
 module FullApplication =
     open Fable.Core
 
-    let private SomeFunction (s: string) = failwith "Never called"
+    let private SomeFunction (s: string): unit = failwith "Never called"
 
     [<Emit("$0.name")>]
     let private GetName (f: obj) = failwith "JS only"
@@ -17,6 +17,15 @@ module FullApplication =
     [<Test>]
     let ``Functions passed as parameters don't generate intermediate annonymous functions`` () =
         let name = GetName SomeFunction
+        equal "SomeFunction" name
+
+    type WithMembers() =
+        member this.SomeMember() = failwith "Never called"
+
+    [<Test>]
+    let ``Members passed as parameters don't generate intermediate annonymous functions`` () =
+        let inst = WithMembers()
+        let name = GetName inst.SomeMember
         equal "SomeFunction" name
 
 #endif

@@ -18,6 +18,7 @@ open Types
 open Identifiers
 open Helpers
 open Util
+open Fable.FSharp2Fable.Atts
 
 // Special values like seq, async, String.Empty...
 let private (|SpecialValue|_|) com ctx = function
@@ -83,32 +84,81 @@ let private compileDerivedConstructor com ctx ent baseFullName (fsExpr: FSharpEx
         |> addError com ctx.fileName (makeRange fsExpr.Range |> Some)
         Fable.Value Fable.Null
 
-let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs body isDelegate =
-    
-    printfn "TRANSFORMING LAMBDA %A %A %A" fsExpr args body
-    let lambdaType = makeType com ctx.typeArgs fsExpr.Type
-    let ctx, args = makeLambdaArgs com ctx args
-    let ctx =
-        (ctx, tupleDestructs)
-        ||> List.fold (fun ctx (var, value) ->
-            transformExpr com ctx value |> bindExpr ctx var)
-    let isDynamicCurried =
-        if not isDelegate && not ctx.isDynamicCurriedLambda then
-            match lambdaType with
-            | Fable.Function(signatureArgs,_,_) -> signatureArgs.Length > args.Length
-            | _ -> false
-        else false
-    let body =
-        let ctx = { ctx with isDynamicCurriedLambda =
-                                isDynamicCurried || ctx.isDynamicCurriedLambda }
-        transformExpr com ctx body
-    let lambda =
-        let captureThis = ctx.thisAvailability <> ThisUnavailable
-        Fable.Lambda(args, body, Fable.LambdaInfo(captureThis, isDelegate))
-        |> Fable.Value
-    if isDynamicCurried
-    then makeDynamicCurriedLambda (makeRangeFrom fsExpr) lambdaType lambda
-    else lambda
+let dbgShit (x: FSharpMemberOrFunctionOrValue) =
+    printfn " - %A " x.CompiledName
+    printfn " - %A " x.DisplayName
+    printfn " - %A " x.FullName
+    printfn " - %A " x.LogicalName
+
+let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body: FSharpExpr) isDelegate =
+    let listAll predicate lst = not (List.exists (predicate >> not) lst)
+    match isDelegate, body with
+    | false, BasicPatterns.Call (target, memberOrFunction, typeArgs, methodTypeArgs, parameters) when target.IsNone && parameters.Length = args.Length ->
+        printfn "CALL target=%A" target
+        printfn "CALL memberOrFunction=%A" memberOrFunction
+        printfn "CALL typeArgs=%A" typeArgs
+        printfn "CALL methodTypeArgs=%A" methodTypeArgs
+        printfn "CALL parameters=%A" parameters
+
+        let sameArgs = args |> List.zip parameters |> listAll (fun (a, p) ->
+            match a with
+            | BasicPatterns.Value a -> a.Equals(p)
+            | _ -> false)
+        if sameArgs then
+            Some memberOrFunction
+        else
+            None
+    | _ -> None
+
+let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs (body: FSharpExpr) isDelegate =
+    printfn "TRANSFORMING LAMBDA %A" fsExpr
+    printfn " - TYPE %A" fsExpr.Type
+    printfn " - SUB %d" body.ImmediateSubExpressions.Length
+    printfn " - ARGS %A" args
+    printfn " - TUPLE_DESTRUCT %A" tupleDestructs
+    printfn " - BODY %A" body
+    printfn " - ISDELEGATE %A" isDelegate
+    printfn " - CTX %A" ctx
+
+    match fsExpr with
+    | BasicPatterns.Lambda (memberOrFunction, _) ->
+        printfn "LAMBDA memberOrFunction=%A" memberOrFunction
+    | _ -> ()
+
+    match lambdaCanBeRemoved args body isDelegate with
+    | Some x ->
+        printfn "----------------------------------------------"
+        printfn "CAN BE REMOVED"
+        printfn "----------------------------------------------"
+        let r, typ = makeRangeFrom fsExpr, makeType com ctx.typeArgs fsExpr.Type
+        printfn "r=%A" r
+        printfn "typ=%A" typ
+
+        makeValueFrom com ctx r typ true x
+    | None ->
+        let lambdaType = makeType com ctx.typeArgs fsExpr.Type
+        let ctx, args = makeLambdaArgs com ctx args
+        let ctx =
+            (ctx, tupleDestructs)
+            ||> List.fold (fun ctx (var, value) ->
+                transformExpr com ctx value |> bindExpr ctx var)
+        let isDynamicCurried =
+            if not isDelegate && not ctx.isDynamicCurriedLambda then
+                match lambdaType with
+                | Fable.Function(signatureArgs,_,_) -> signatureArgs.Length > args.Length
+                | _ -> false
+            else false
+        let body =
+            let ctx = { ctx with isDynamicCurriedLambda =
+                                    isDynamicCurried || ctx.isDynamicCurriedLambda }
+            transformExpr com ctx body
+        let lambda =
+            let captureThis = ctx.thisAvailability <> ThisUnavailable
+            Fable.Lambda(args, body, Fable.LambdaInfo(captureThis, isDelegate))
+            |> Fable.Value
+        if isDynamicCurried
+        then makeDynamicCurriedLambda (makeRangeFrom fsExpr) lambdaType lambda
+        else lambda
 
 let private transformNewList com ctx (fsExpr: FSharpExpr) fsType argExprs =
     let rec flattenList (r: SourceLocation) accArgs = function

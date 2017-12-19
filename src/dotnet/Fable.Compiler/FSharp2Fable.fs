@@ -94,17 +94,16 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
     let listAll predicate lst = not (List.exists (predicate >> not) lst)
     match isDelegate, body with
     | false, BasicPatterns.Call (target, memberOrFunction, typeArgs, methodTypeArgs, parameters) when target.IsNone && parameters.Length = args.Length ->
-        (*printfn "CALL target=%A" target
-        printfn "CALL memberOrFunction=%A" memberOrFunction
-        printfn "CALL typeArgs=%A" typeArgs
-        printfn "CALL methodTypeArgs=%A" methodTypeArgs
-        printfn "CALL parameters=%A" parameters*)
-
         let sameArgs = args |> List.zip parameters |> listAll (fun (a, p) ->
             match a with
             | BasicPatterns.Value a -> a.Equals(p)
             | _ -> false)
         if sameArgs then
+            printfn "CALL target=%A" target
+            printfn "CALL memberOrFunction=%A" memberOrFunction
+            printfn "CALL typeArgs=%A" typeArgs
+            printfn "CALL methodTypeArgs=%A" methodTypeArgs
+            printfn "CALL parameters=%A" parameters
             Some memberOrFunction
         else
             None

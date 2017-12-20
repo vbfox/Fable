@@ -804,8 +804,6 @@ module AstPass =
                 GlobalCall ("Math", Some methName, false, args)
                 |> makeCall range typ |> Some
         let r, typ, args = info.range, info.returnType, info.args
-        if info.methodName = "identity" then
-            printfn "XXXXXXXXXXXXXXXX %A" info
         match info.methodName with
         | "keyValuePattern" ->
             info.args.Head |> Some

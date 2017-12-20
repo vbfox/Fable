@@ -120,7 +120,7 @@ let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body:
 
 let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs (body: FSharpExpr) isDelegate =
     match lambdaCanBeRemoved args body isDelegate with
-    | Some x when true ->
+    | Some x when false ->
         printfn "----------------------------------------------"
         printfn "CAN BE REMOVED"
         printfn "----------------------------------------------"

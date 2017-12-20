@@ -6,7 +6,6 @@
 open Fable.Core.JsInterop
 importSideEffects "./js/polyfill"
 importSideEffects "./ApplicativeTests.fs"
-(*
 importSideEffects "./ArithmeticTests.fs"
 importSideEffects "./ArrayTests.fs"
 importSideEffects "./AsyncTests.fs"
@@ -36,11 +35,11 @@ importSideEffects "./ResultTests.fs"
 importSideEffects "./SeqExpressionTests.fs"
 importSideEffects "./SeqTests.fs"
 importSideEffects "./SetTests.fs"
-importSideEffects "./StringTests.fs"*)
-importSideEffects "./SudokuTest.fs"(*
+importSideEffects "./StringTests.fs"
+importSideEffects "./SudokuTest.fs"
 importSideEffects "./TailCallTests.fs"
 importSideEffects "./TupleTypeTests.fs"
 importSideEffects "./TypeTests.fs"
 importSideEffects "./UnionTypeTests.fs"
-importSideEffects "./ElmishParserTests.fs"*)
+importSideEffects "./ElmishParserTests.fs"
 #endif

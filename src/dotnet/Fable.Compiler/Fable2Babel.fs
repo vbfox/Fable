@@ -6,7 +6,6 @@ open Fable.AST.Babel
 open Fable.AST.Fable.Util
 open System
 open System.Collections.Generic
-
 type ReturnStrategy =
     | Return
     | Assign of Expression
@@ -389,34 +388,56 @@ module Util =
             :> Expression
         | _ -> e
 
+    /// A removable lambda is a lambda that does nothing but call a single function/method
+    /// passing all it's arguments as-is.
     let getRemovableLambda (args: Pattern list) (body: U2<BlockStatement, Expression>) =
         let listAll predicate lst = not (List.exists (predicate >> not) lst)
-        let getRemovableCall (e: Expression) =
-            if e.``type`` = "CallExpression" then
-                let callExpr = e :?> CallExpression
-                // Callee can't be a member expression because of javascript binding rules
-                if callExpr.callee.``type`` = "Identifier" && callExpr.arguments.Length = args.Length then
-                    let argNames = args |> List.map (function | :? Identifier as id -> id.name | _ -> "")
-                    let argsMatches = List.zip argNames callExpr.arguments |> listAll (fun (expectedName, arg) ->
-                        match arg with
-                        | U2.Case1 argExpr when argExpr.``type`` = "Identifier" ->
-                            let argIdentifier = argExpr :?> Identifier
-                            argIdentifier.name = expectedName
-                        | _ -> false
-                    )
+        let hasSameArgs (callExpr: CallExpression) =
+            if callExpr.arguments.Length = args.Length then
+                let argNames = args |> List.map (function | :? Identifier as id -> id.name | _ -> "")
+                List.zip argNames callExpr.arguments |> listAll (fun (expectedName, arg) ->
+                    match arg with
+                    | U2.Case1 argExpr when argExpr.``type`` = "Identifier" ->
+                        let argIdentifier = argExpr :?> Identifier
+                        argIdentifier.name = expectedName
+                    | _ -> false
+                )
+            else
+                false
 
-                    if argsMatches then Some callExpr.callee else None
+        let getRemovableCall (e: Expression) =
+            match e with
+            | :? CallExpression as callExpr ->
+                if hasSameArgs callExpr then
+                    match callExpr.callee with
+                    | :? Identifier -> Some callExpr.callee
+                    | :? MemberExpression as memberExpr ->
+                        if (not memberExpr.computed) && (memberExpr.``object``.``type`` = "Identifier") then
+                            Some (
+                                CallExpression(
+                                    MemberExpression(
+                                        memberExpr,
+                                        Identifier("bind"),
+                                        ?computed = Some false),
+                                    [ U2.Case1 (memberExpr.``object``) ]) :> Expression)
+                        else
+                            None
+                    | _ -> None
                 else
                     None
-            else
+            | _ ->
                 None
 
         match body with
-        | U2.Case2 e when e.``type`` = "CallExpression" ->
+        | U2.Case2 e ->
             // function(x) { return foo(x); } -> foo
+            // Only valid because the call was generated in F#: Functions are mutable and can have members in
+            // javascript and this transformation change what is returned.
             getRemovableCall e
         | U2.Case1 block ->
             // function(x) { foo(x); } -> foo
+            // Only valid because the call was generated in F#: this transformation changes the return type of the
+            // function.
             match block.body with
             | [statement] ->
                 match statement with

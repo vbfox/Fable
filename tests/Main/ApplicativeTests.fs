@@ -26,13 +26,13 @@ module FullApplication =
         ignore (GetName not)
         ignore (GetName abs)
 
-    [<Emit("($0 === undefined)")>]
-    let isUndefined (x: 'a): bool = failwith "JS only"
+    [<Emit("($1 == null)")>]
+    let isJsNull (x: 'a): bool = failwith "JS only"
 
     [<Test>]
     let ``Erasing return still possible`` () =
-        let getAnswer() = 42
-        let erased = fun _ -> getAnswer() |> ignore
-        let result = erased()
-        equal true (isUndefined result)
+        let getAnswer x = 42
+        let erased = fun x -> getAnswer x |> ignore
+        let result = erased 420
+        equal true (unbox result = null)
 #endif

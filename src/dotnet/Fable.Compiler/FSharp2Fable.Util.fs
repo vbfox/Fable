@@ -530,6 +530,7 @@ module Patterns =
             | e -> tupleDestructs, e
         let rec flattenLambda args tupleDestructs = function
             | Lambda(arg, body) ->
+                printfn "XXXXX FLATEN %A %A" arg body
                 let tupleDestructs, body =
                     if arg.FullType.IsTupleType && arg.IsCompilerGenerated && arg.CompiledName = "tupledArg"
                     then flattenDestructs tupleDestructs body

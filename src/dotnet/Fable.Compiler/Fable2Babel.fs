@@ -454,21 +454,7 @@ module Util =
         then upcast ArrowFunctionExpression (args, body, ?loc=r)
         else
             match getRemovableLambda args body with
-            | Some e ->
-                printfn "LAMBADA info %A" info
-                printfn "LAMBADA args %A" args
-                printfn "LAMBADA body %A" body
-                printfn "LAMBADA r %A" r
-                printfn "LAMBADA REMOVABLE = %A" (getRemovableLambda args body)
-                let wanted: Expression =
-                    match body with
-                    | U2.Case1 body -> body
-                    | U2.Case2 e -> BlockStatement([ReturnStatement(e, ?loc=e.loc)], ?loc=e.loc)
-                    |> fun body -> upcast FunctionExpression (args, body, ?loc=r)
-
-                printfn "GENERATED %A @ %A" e e.loc
-                printfn "WANTED %A @ %A" wanted wanted.loc
-                e
+            | Some e -> e
             | _ ->
                 match body with
                 | U2.Case1 body -> body

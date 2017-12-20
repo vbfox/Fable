@@ -18,7 +18,6 @@ open Types
 open Identifiers
 open Helpers
 open Util
-open Fable.FSharp2Fable.Atts
 
 // Special values like seq, async, String.Empty...
 let private (|SpecialValue|_|) com ctx = function
@@ -84,83 +83,30 @@ let private compileDerivedConstructor com ctx ent baseFullName (fsExpr: FSharpEx
         |> addError com ctx.fileName (makeRange fsExpr.Range |> Some)
         Fable.Value Fable.Null
 
-let dbgShit (x: FSharpMemberOrFunctionOrValue) =
-    printfn " - %A " x.CompiledName
-    printfn " - %A " x.DisplayName
-    printfn " - %A " x.FullName
-    printfn " - %A " x.LogicalName
-
-let isOperator (m: FSharpMemberOrFunctionOrValue) =
-    match m.EnclosingEntity |> Option.map (fun e -> e.FullName) with
-    | Some "Microsoft.FSharp.Core.Operators"
-    | Some "Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators"
-    | Some "Microsoft.FSharp.Core.ExtraTopLevelOperators" -> true
-    | _ -> false
-
-let private lambdaCanBeRemoved (args: FSharpMemberOrFunctionOrValue list) (body: FSharpExpr) isDelegate =
-    let listAll predicate lst = not (List.exists (predicate >> not) lst)
-    match isDelegate, body with
-    | false, BasicPatterns.Call (target, memberOrFunction, typeArgs, methodTypeArgs, parameters) when target.IsNone && parameters.Length = args.Length ->
-        let sameArgs = args |> List.zip parameters |> listAll (fun (a, p) ->
-            match a with
-            | BasicPatterns.Value a -> a.Equals(p)
-            | _ -> false)
-
-        if sameArgs && (not (isOperator memberOrFunction)) then
-            printfn "CALL target=%A" target
-            printfn "CALL memberOrFunction=%A" memberOrFunction
-            printfn "CALL memberOrFunction.EnclosingEntity=%A" memberOrFunction.EnclosingEntity.Value.FullName
-            printfn "CALL typeArgs=%A" typeArgs
-            printfn "CALL methodTypeArgs=%A" methodTypeArgs
-            printfn "CALL parameters=%A" parameters
-            Some memberOrFunction
-        else
-            None
-    | _ -> None
-
-let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs (body: FSharpExpr) isDelegate =
-    match lambdaCanBeRemoved args body isDelegate with
-    | Some x when false ->
-        printfn "----------------------------------------------"
-        printfn "CAN BE REMOVED"
-        printfn "----------------------------------------------"
-        printfn " - TYPE %A" fsExpr.Type
-        printfn " - SUB %d" body.ImmediateSubExpressions.Length
-        printfn " - ARGS %A" args
-        printfn " - TUPLE_DESTRUCT %A" tupleDestructs
-        printfn " - BODY %A" body
-        printfn " - ISDELEGATE %A" isDelegate
-        printfn " - CTX %A" ctx
-
-        let r, typ = makeRangeFrom fsExpr, makeType com ctx.typeArgs fsExpr.Type
-        printfn "r=%A" r
-        printfn "typ=%A" typ
-
-        makeValueFrom com ctx r typ true x
-    | _ ->
-        let lambdaType = makeType com ctx.typeArgs fsExpr.Type
-        let ctx, args = makeLambdaArgs com ctx args
-        let ctx =
-            (ctx, tupleDestructs)
-            ||> List.fold (fun ctx (var, value) ->
-                transformExpr com ctx value |> bindExpr ctx var)
-        let isDynamicCurried =
-            if not isDelegate && not ctx.isDynamicCurriedLambda then
-                match lambdaType with
-                | Fable.Function(signatureArgs,_,_) -> signatureArgs.Length > args.Length
-                | _ -> false
-            else false
-        let body =
-            let ctx = { ctx with isDynamicCurriedLambda =
-                                    isDynamicCurried || ctx.isDynamicCurriedLambda }
-            transformExpr com ctx body
-        let lambda =
-            let captureThis = ctx.thisAvailability <> ThisUnavailable
-            Fable.Lambda(args, body, Fable.LambdaInfo(captureThis, isDelegate))
-            |> Fable.Value
-        if isDynamicCurried
-        then makeDynamicCurriedLambda (makeRangeFrom fsExpr) lambdaType lambda
-        else lambda
+let private transformLambda com ctx (fsExpr: FSharpExpr) args tupleDestructs body isDelegate =
+    let lambdaType = makeType com ctx.typeArgs fsExpr.Type
+    let ctx, args = makeLambdaArgs com ctx args
+    let ctx =
+        (ctx, tupleDestructs)
+        ||> List.fold (fun ctx (var, value) ->
+            transformExpr com ctx value |> bindExpr ctx var)
+    let isDynamicCurried =
+        if not isDelegate && not ctx.isDynamicCurriedLambda then
+            match lambdaType with
+            | Fable.Function(signatureArgs,_,_) -> signatureArgs.Length > args.Length
+            | _ -> false
+        else false
+    let body =
+        let ctx = { ctx with isDynamicCurriedLambda =
+                                isDynamicCurried || ctx.isDynamicCurriedLambda }
+        transformExpr com ctx body
+    let lambda =
+        let captureThis = ctx.thisAvailability <> ThisUnavailable
+        Fable.Lambda(args, body, Fable.LambdaInfo(captureThis, isDelegate))
+        |> Fable.Value
+    if isDynamicCurried
+    then makeDynamicCurriedLambda (makeRangeFrom fsExpr) lambdaType lambda
+    else lambda
 
 let private transformNewList com ctx (fsExpr: FSharpExpr) fsType argExprs =
     let rec flattenList (r: SourceLocation) accArgs = function
@@ -756,20 +702,18 @@ let private transformExpr (com: IFableCompiler) ctx fsExpr =
     | FlattenedApplication(Transform com ctx callee, _typeArgs, args) ->
         // TODO: Ask why application without arguments happen. So far I've seen it for
         // accessing None or struct values (like the Result type)
-        if args.Length = 0 then
-            callee
-        else
-            let typ, range = makeType com ctx.typeArgs fsExpr.Type, makeRangeFrom fsExpr
-            let args = List.map (transformExpr com ctx) args
-            match callee.Type with
-            | Fable.DeclaredType(ent,_) when ent.FullName = "Fable.Core.Applicable" ->
-                let args =
-                    match args with
-                    | [Fable.Value(Fable.TupleConst args)] -> args
-                    | args -> args
-                Fable.Apply(callee, args, Fable.ApplyMeth, typ, range)
-            | _ ->
-            makeApply com range typ callee args
+        if args.Length = 0 then callee else
+        let typ, range = makeType com ctx.typeArgs fsExpr.Type, makeRangeFrom fsExpr
+        let args = List.map (transformExpr com ctx) args
+        match callee.Type with
+        | Fable.DeclaredType(ent,_) when ent.FullName = "Fable.Core.Applicable" ->
+            let args =
+                match args with
+                | [Fable.Value(Fable.TupleConst args)] -> args
+                | args -> args
+            Fable.Apply(callee, args, Fable.ApplyMeth, typ, range)
+        | _ ->
+        makeApply com range typ callee args
 
     | BasicPatterns.IfThenElse (Transform com ctx guardExpr, Transform com ctx thenExpr, Transform com ctx elseExpr) ->
         Fable.IfThenElse (guardExpr, thenExpr, elseExpr, makeRangeFrom fsExpr)

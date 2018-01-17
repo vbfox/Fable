@@ -405,7 +405,7 @@ module Util =
             else
                 false
 
-        let getRemovableCall (e: Expression) =
+        let getRemovableCall (e: Expression) (loc: SourceLocation option)=
             match e with
             | :? CallExpression as callExpr ->
                 if hasSameArgs callExpr then
@@ -418,8 +418,10 @@ module Util =
                                     MemberExpression(
                                         memberExpr,
                                         Identifier("bind"),
-                                        ?computed = Some false),
-                                    [ U2.Case1 (memberExpr.``object``) ]) :> Expression)
+                                        ?computed = Some false,
+                                        ?loc = memberExpr.loc),
+                                    [ U2.Case1 (memberExpr.``object``) ],
+                                    ?loc = loc) :> Expression)
                         else
                             None
                     | _ -> None
@@ -429,11 +431,6 @@ module Util =
                 None
 
         match body with
-        | U2.Case2 e ->
-            // function(x) { return foo(x); } -> foo
-            // Only valid because the call was generated in F#: Functions are mutable and can have members in
-            // javascript and this transformation change what is returned.
-            getRemovableCall e
         | U2.Case1 block ->
             // function(x) { foo(x); } -> foo
             // Only valid because the call was generated in F#: this transformation changes the return type of the
@@ -442,11 +439,15 @@ module Util =
             | [statement] ->
                 match statement with
                 | :? ExpressionStatement as statement ->
-                    getRemovableCall statement.expression
+                    getRemovableCall statement.expression block.loc
                 | _ -> None
             | _ ->
                 None
-        | _ -> None
+        | U2.Case2 e ->
+            // function(x) { return foo(x); } -> foo
+            // Only valid because the call was generated in F#: Functions are mutable and can have members in
+            // javascript and this transformation change what is returned.
+            getRemovableCall e e.loc
 
     let transformLambda r (info: Fable.LambdaInfo) args body: Expression =
         if info.CaptureThis

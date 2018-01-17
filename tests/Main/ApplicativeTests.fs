@@ -785,13 +785,16 @@ module Results =
 module FullApplication =
     open Fable.Core
 
-    let private SomeFunction (s: string): unit = failwith "Never called"
+    let private SomeProcedure (s: string): unit = failwith "Never called"
+    let private SomeFunction (s: string): string = s
 
     [<Emit("$0.name")>]
     let private GetName (f: obj) = failwith "JS only"
 
     [<Test>]
     let ``Functions passed as parameters don't generate intermediate anonymous functions`` () =
-        let name = GetName SomeFunction
-        equal "SomeFunction" name
+        let functionName = GetName SomeFunction
+        equal "SomeFunction" functionName
+        let procedureName = GetName SomeProcedure
+        equal "SomeProcedure" procedureName
 #endif
